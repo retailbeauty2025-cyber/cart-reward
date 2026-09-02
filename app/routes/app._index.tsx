@@ -1,100 +1,85 @@
-import { useEffect } from "react";
-import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useFetcher } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-  return null;
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
-  const functionsResponse = await admin.graphql(`#graphql
-    query RewardFunctions {
-      shopifyFunctions(first: 25) {
-        nodes { id title handle apiType }
-      }
-    }
-  `);
-  const functionsJson = await functionsResponse.json();
-  const functions = functionsJson.data?.shopifyFunctions?.nodes ?? [];
-  const rewardFunction = functions.find(
-    (fn: { handle?: string }) => fn.handle === "free-gift-discount",
-  );
+  const url = new URL(request.url);
+  if (url.searchParams.get("activate") !== "1") return { message: "", ok: true };
 
-  if (!rewardFunction) {
-    return { ok: false, message: "Deploy the free-gift-discount Function first, then try again." };
-  }
-
-  const createResponse = await admin.graphql(`#graphql
-    mutation CreateCartReward($input: DiscountAutomaticAppInput!) {
-      discountAutomaticAppCreate(automaticAppDiscount: $input) {
-        automaticAppDiscount { discountId title status }
-        userErrors { field message }
+  try {
+    const functionsResponse = await admin.graphql(`#graphql
+      query RewardFunctions {
+        shopifyFunctions(first: 25) {
+          nodes { id title handle apiType }
+        }
       }
+    `);
+    const functionsJson = await functionsResponse.json();
+    if (functionsJson.errors?.length) {
+      return { ok: false, message: functionsJson.errors.map((e: { message: string }) => e.message).join("; ") };
     }
-  `, {
-    variables: {
-      input: {
-        title: "Cart Reward – Free Toothbrush",
-        functionId: rewardFunction.id,
-        startsAt: new Date().toISOString(),
-        combinesWith: {
-          orderDiscounts: false,
-          productDiscounts: false,
-          shippingDiscounts: true,
+
+    const rewardFunction = functionsJson.data?.shopifyFunctions?.nodes?.find(
+      (fn: { handle?: string }) => fn.handle === "free-gift-discount",
+    );
+    if (!rewardFunction) {
+      return { ok: false, message: "Function not found. Run shopify app deploy first." };
+    }
+
+    const createResponse = await admin.graphql(`#graphql
+      mutation CreateCartReward($input: DiscountAutomaticAppInput!) {
+        discountAutomaticAppCreate(automaticAppDiscount: $input) {
+          automaticAppDiscount { discountId title status }
+          userErrors { field message }
+        }
+      }
+    `, {
+      variables: {
+        input: {
+          title: "Cart Reward – Free Toothbrush",
+          functionId: rewardFunction.id,
+          startsAt: new Date().toISOString(),
+          combinesWith: {
+            orderDiscounts: false,
+            productDiscounts: false,
+            shippingDiscounts: true,
+          },
         },
       },
-    },
-  });
-  const createJson = await createResponse.json();
-  const payload = createJson.data?.discountAutomaticAppCreate;
-  const errors = payload?.userErrors ?? createJson.errors ?? [];
-
-  if (errors.length) {
-    return { ok: false, message: errors.map((error: { message: string }) => error.message).join("; ") };
+    });
+    const createJson = await createResponse.json();
+    const errors = createJson.data?.discountAutomaticAppCreate?.userErrors ?? createJson.errors ?? [];
+    if (errors.length) {
+      return { ok: false, message: errors.map((e: { message: string }) => e.message).join("; ") };
+    }
+    const discount = createJson.data?.discountAutomaticAppCreate?.automaticAppDiscount;
+    return { ok: true, message: `${discount.title} is ${String(discount.status).toLowerCase()}.` };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Discount activation failed." };
   }
-  return { ok: true, message: `${payload.automaticAppDiscount.title} is active.` };
 };
 
 export default function Index() {
-  const fetcher = useFetcher<typeof action>();
-  const shopify = useAppBridge();
-  const busy = fetcher.state !== "idle";
-
-  useEffect(() => {
-    if (fetcher.data?.message) shopify.toast.show(fetcher.data.message);
-  }, [fetcher.data, shopify]);
-
+  const data = useLoaderData<typeof loader>();
   return (
     <s-page heading="Cart rewards">
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        loading={busy}
-        onClick={() => fetcher.submit({}, { method: "POST" })}
-      >
+      <s-button slot="primary-action" variant="primary" href="/app?activate=1">
         Activate automatic reward
       </s-button>
-
       <s-section heading="Reward rules">
         <s-unordered-list>
           <s-list-item>Any 2 eligible Classic, Kids or Strong single bottles: one free toothbrush</s-list-item>
-          <s-list-item>Any 3 eligible single bottles: free-shipping milestone</s-list-item>
           <s-list-item>Bundle products are excluded</s-list-item>
           <s-list-item>The free toothbrush quantity is fixed at one</s-list-item>
         </s-unordered-list>
       </s-section>
-
-      <s-section heading="Activation">
+      <s-section heading="Activation status">
         <s-paragraph>
-          Delete or deactivate native Buy X Get Y discounts for this offer. Click Activate
-          automatic reward once to create the automatic app discount connected to this Function.
+          Remove native Buy X Get Y discounts for this offer, then activate this automatic Function discount once.
         </s-paragraph>
-        {fetcher.data?.message && <s-paragraph>{fetcher.data.message}</s-paragraph>}
+        {data.message && <s-paragraph>{data.ok ? `Success: ${data.message}` : `Error: ${data.message}`}</s-paragraph>}
       </s-section>
     </s-page>
   );
