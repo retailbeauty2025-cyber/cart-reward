@@ -1,0 +1,66 @@
+{% comment %} Compact two-step reward bar. Only the three single products qualify. {% endcomment %}
+{% assign reward_classic = all_products['dant-manjari-classic'] %}
+{% assign reward_kids = all_products['dant-manjan-for-kids'] %}
+{% assign reward_strong = all_products['dant-manjan-strong'] %}
+{% assign reward_gift_variant_id = 0 %}
+{% for reward_product in collections.all.products %}
+  {% if reward_product.id == 9786179354865 %}
+    {% assign reward_gift_variant_id = reward_product.selected_or_first_available_variant.id %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+
+<div class="cart-reward" id="cart-reward-bar">
+  <p class="cart-reward__heading" id="cart-reward-heading">0/2 bottles — add 2 to get a FREE toothbrush</p>
+  <div class="cart-reward__track" aria-label="Cart rewards">
+    <span class="cart-reward__fill" id="cart-reward-line-fill"></span>
+    <div class="cart-reward__step" id="cart-reward-step-1"><span class="cart-reward__icon">🎁</span><strong>Free Toothbrush</strong></div>
+    <div class="cart-reward__step" id="cart-reward-step-2"><span class="cart-reward__icon">🚚</span><strong>Free Shipping</strong></div>
+  </div>
+  <p class="cart-reward__error" id="cart-reward-error" hidden></p>
+</div>
+
+<script type="application/json" id="cart-reward-config">
+{"eligibleProductIds":[{{ reward_classic.id | default: 0 | json }},{{ reward_kids.id | default: 0 | json }},{{ reward_strong.id | default: 0 | json }}],"giftVariantId":{{ reward_gift_variant_id | default: 0 | json }},"giftPropertyKey":"_free_gift","giftPropertyValue":"true"}
+</script>
+
+<style>
+  .cart-reward{box-sizing:border-box;width:100%;margin:0 0 24px;padding:12px 14px 14px;background:#fff;border:1px solid #ececec;border-radius:14px;font-family:inherit}
+  .cart-reward__heading{margin:0 0 12px;color:#172019;font-size:13px;font-weight:700;line-height:1.35}
+  .cart-reward__track{position:relative;display:flex;justify-content:space-between;padding-top:4px}
+  .cart-reward__track:before,.cart-reward__fill{content:"";position:absolute;top:16px;left:25%;right:25%;height:4px;border-radius:9px;background:#edf0ed}
+  .cart-reward__fill{right:auto;width:0;background:#2e7d45;transition:width .25s ease}
+  .cart-reward__step{position:relative;z-index:1;display:flex;width:50%;flex-direction:column;align-items:center;gap:5px;color:#737a75;text-align:center}
+  .cart-reward__icon{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#edf0ed;font-size:13px;filter:grayscale(1)}
+  .cart-reward__step strong{font-size:11px;line-height:1.2;white-space:nowrap}
+  .cart-reward__step.is-complete{color:#225d34}.cart-reward__step.is-complete .cart-reward__icon{background:#2e7d45;color:#fff;filter:none}
+  .cart-reward__error{margin:9px 0 0;color:#a12622;font-size:11px;line-height:1.3}
+</style>
+
+<script>
+(function(){
+  if(window.__cartRewardInstalled){window.CartRewardBar&&window.CartRewardBar.sync();return}window.__cartRewardInstalled=true;
+  var configNode=document.getElementById('cart-reward-config');if(!configNode)return;
+  var cfg=JSON.parse(configNode.textContent),syncing=false,resyncTimer=null,nativeFetch=window.fetch.bind(window);
+  cfg.eligibleProductIds=cfg.eligibleProductIds.filter(function(id){return id>0});
+  function el(id){return document.getElementById(id)}
+  function isGift(item){return item.properties&&String(item.properties[cfg.giftPropertyKey])===cfg.giftPropertyValue}
+  function eligibleQty(cart){return cart.items.reduce(function(total,item){return total+(!isGift(item)&&cfg.eligibleProductIds.indexOf(item.product_id)!==-1?item.quantity:0)},0)}
+  function giftRow(){return Array.from(document.querySelectorAll('cart-drawer .cart-item,cart-drawer [data-cart-item],cart-drawer tr')).find(function(row){return /Adults Bamboo Toothbrush\s*-\s*Charcoal Infused Bristles/i.test(row.textContent)})}
+  function protectGiftRow(){var row=giftRow();if(!row)return;row.querySelectorAll('quantity-input,.quantity,.cart-item__quantity-wrapper,cart-remove-button,[name="minus"],[name="plus"],button[aria-label*="Remove"],button[aria-label*="remove"]').forEach(function(control){control.style.display='none';control.setAttribute&&control.setAttribute('aria-hidden','true')})}
+  function cleanDiscountLabels(){document.querySelectorAll('cart-drawer .discounts__discount,cart-drawer [class*="discount"]').forEach(function(label){if(!/free\s*(bamboo\s*)?tooth\s*brush/i.test(label.textContent))return;var row=label.closest('.cart-item,[data-cart-item],tr');if(row&&!/Adults Bamboo Toothbrush\s*-\s*Charcoal Infused Bristles/i.test(row.textContent))label.style.display='none'});protectGiftRow()}
+  function render(qty){var h=el('cart-reward-heading'),f=el('cart-reward-line-fill'),a=el('cart-reward-step-1'),b=el('cart-reward-step-2');if(!h||!f||!a||!b)return;a.classList.toggle('is-complete',qty>=2);b.classList.toggle('is-complete',qty>=3);f.style.width=qty>=3?'50%':qty>=2?'25%':'0';if(qty>=3)h.textContent='All rewards unlocked — FREE toothbrush + FREE shipping';else if(qty===2)h.textContent='Toothbrush unlocked — add 1 more bottle for FREE shipping';else h.textContent=qty+'/2 bottles — add '+(2-qty)+' more to get a FREE toothbrush';cleanDiscountLabels()}
+  function error(message){var n=el('cart-reward-error');if(n){n.textContent=message;n.hidden=!message}}
+  function request(url,options){return nativeFetch(url,options).then(function(res){if(!res.ok)return res.json().catch(function(){return{}}).then(function(body){throw new Error(body.description||'Cart update failed')});return res.json()})}
+  function drawerSections(){var drawer=document.querySelector('cart-drawer');return drawer&&typeof drawer.getSectionsToRender==='function'?drawer.getSectionsToRender().map(function(section){return section.id}):[]}
+  function cartBody(data){var sections=drawerSections();if(sections.length){data.sections=sections;data.sections_url=window.location.pathname}return data}
+  function addGift(){if(!cfg.giftVariantId)return Promise.reject(new Error('Free toothbrush is unavailable. Make sure product 9786179354865 is active on the Online Store channel.'));var properties={};properties[cfg.giftPropertyKey]=cfg.giftPropertyValue;return request('/cart/add.js',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(cartBody({items:[{id:cfg.giftVariantId,quantity:1,properties:properties}]}))})}
+  function changeGift(key,quantity){return request('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(cartBody({id:key,quantity:quantity}))})}
+  function refresh(state){var items=document.querySelector('cart-drawer-items');if(items&&typeof items.onCartUpdate==='function')items.onCartUpdate();else document.dispatchEvent(new CustomEvent('cart:refresh',{detail:state}));document.dispatchEvent(new CustomEvent('cart-reward:changed',{detail:state}));setTimeout(cleanDiscountLabels,120)}
+  function sync(){if(syncing){scheduleSync(350);return}syncing=true;error('');request('/cart.js').then(function(cart){var qty=eligibleQty(cart),gift=cart.items.find(isGift);render(qty);if(qty>=2&&!gift)return addGift().then(refresh);if(qty>=2&&gift&&gift.quantity!==1)return changeGift(gift.key,1).then(refresh);if(qty<2&&gift)return changeGift(gift.key,0).then(refresh)}).catch(function(e){error(e.message)}).finally(function(){syncing=false})}
+  function scheduleSync(delay){clearTimeout(resyncTimer);resyncTimer=setTimeout(sync,delay||220)}
+  window.fetch=function(input,options){var url=typeof input==='string'?input:(input&&input.url)||'';return nativeFetch(input,options).then(function(response){if(/\/cart\/(add|change|update|clear)\.js/.test(url)){scheduleSync(250);setTimeout(sync,800)}return response})};
+  var drawer=document.querySelector('cart-drawer');if(drawer)new MutationObserver(function(){cleanDiscountLabels();scheduleSync(300)}).observe(drawer,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',sync);['cart:updated','cart:change','cart:build'].forEach(function(name){document.addEventListener(name,function(){scheduleSync(220)})});window.addEventListener('cart:updated',function(){scheduleSync(220)});document.addEventListener('submit',function(e){if(e.target&&e.target.action&&e.target.action.indexOf('/cart/add')!==-1)scheduleSync(500)});window.CartRewardBar={sync:sync};sync();
+})();
+</script>

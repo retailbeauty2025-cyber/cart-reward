@@ -1,0 +1,23 @@
+query RunInput {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        ... on ProductVariant {
+          id
+          product {
+            id
+            handle
+          }
+        }
+      }
+      # This reads the "_free_gift" line-item property our theme snippet
+      # sets when it auto-adds the toothbrush. Change the key here if you
+      # rename the property in the storefront JS.
+      attribute(key: "_free_gift") {
+        value
+      }
+    }
+  }
+}
