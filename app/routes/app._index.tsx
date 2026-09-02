@@ -28,6 +28,62 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return { ok: false, message: "Function not found. Run shopify app deploy first." };
     }
 
+    const existingResponse = await admin.graphql(`#graphql
+      query ExistingCartReward {
+        discountNodes(first: 100, query: "title:'Cart Reward – Free Toothbrush'") {
+          nodes {
+            id
+            discount {
+              ... on DiscountAutomaticApp {
+                title
+                status
+                appDiscountType { functionId }
+              }
+              ... on DiscountAutomaticBxgy { title status }
+              ... on DiscountAutomaticBasic { title status }
+              ... on DiscountAutomaticFreeShipping { title status }
+            }
+          }
+        }
+      }
+    `);
+    const existingJson = await existingResponse.json();
+    if (existingJson.errors?.length) {
+      return { ok: false, message: existingJson.errors.map((e: { message: string }) => e.message).join("; ") };
+    }
+    const existingNodes = existingJson.data?.discountNodes?.nodes ?? [];
+    const existingAppDiscount = existingNodes.find(
+      (node: { discount?: { title?: string; appDiscountType?: { functionId?: string } } }) =>
+        node.discount?.title === "Cart Reward – Free Toothbrush" &&
+        node.discount?.appDiscountType?.functionId === rewardFunction.id,
+    );
+
+    if (existingAppDiscount?.discount?.status === "ACTIVE") {
+      return { ok: true, message: "Cart Reward – Free Toothbrush is already active." };
+    }
+    if (existingAppDiscount) {
+      const activateResponse = await admin.graphql(`#graphql
+        mutation ActivateCartReward($id: ID!) {
+          discountAutomaticActivate(id: $id) {
+            automaticDiscountNode { id }
+            userErrors { field message }
+          }
+        }
+      `, { variables: { id: existingAppDiscount.id } });
+      const activateJson = await activateResponse.json();
+      const activateErrors = activateJson.data?.discountAutomaticActivate?.userErrors ?? activateJson.errors ?? [];
+      if (activateErrors.length) {
+        return { ok: false, message: activateErrors.map((e: { message: string }) => e.message).join("; ") };
+      }
+      return { ok: true, message: "Existing Cart Reward – Free Toothbrush discount was activated." };
+    }
+    const titleConflict = existingNodes.find(
+      (node: { discount?: { title?: string } }) => node.discount?.title === "Cart Reward – Free Toothbrush",
+    );
+    if (titleConflict) {
+      return { ok: false, message: "A native discount already uses this title. Delete that discount, then activate again." };
+    }
+
     const createResponse = await admin.graphql(`#graphql
       mutation CreateCartReward($input: DiscountAutomaticAppInput!) {
         discountAutomaticAppCreate(automaticAppDiscount: $input) {
