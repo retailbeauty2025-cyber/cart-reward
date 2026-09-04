@@ -70,7 +70,6 @@ const performAction = async ({ request }: ActionFunctionArgs) => {
             type: "json",
             ownerType: "SHOP",
             access: {
-              admin: "MERCHANT_READ_WRITE",
               storefront: "PUBLIC_READ",
             },
           },
