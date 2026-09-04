@@ -5,7 +5,21 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 const NS = "cart_rewards", KEY = "config", TITLE = "Cart Reward – Toothbrushes";
-const defaults = { eligibleProducts: [], adultGift: null, kidsGift: null, toothbrushAt: 2, shippingAt: 3, doubleGiftAt: 4 };
+const defaults = {
+  eligibleProducts: [], adultGift: null, kidsGift: null,
+  toothbrushAt: 2, shippingAt: 3, doubleGiftAt: 4,
+  progressText: "{qty}/{target} bottles — add {remaining} more to get a FREE toothbrush",
+  giftUnlockedText: "Toothbrush unlocked — add {remaining} more bottle for FREE shipping",
+  allUnlockedText: "All rewards unlocked — FREE toothbrush + FREE shipping",
+  giftLabel: "Free Toothbrush", shippingLabel: "Free Shipping",
+  giftIconUrl: "", shippingIconUrl: "",
+  backgroundColor: "#ffffff", headingColor: "#172019", labelColor: "#737a75",
+  completedColor: "#225d34", accentColor: "#2e7d45", trackColor: "#edf0ed",
+  borderColor: "#ececec", borderWidth: 1, borderRadius: 14,
+  headingFontSize: 13, labelFontSize: 11, iconSize: 28, lineThickness: 4,
+  animationDuration: 450, paddingTop: 12, paddingRight: 14, paddingBottom: 14, paddingLeft: 14,
+  marginTop: 0, marginRight: 0, marginBottom: 20, marginLeft: 0,
+};
 const readJson = (response: Response) => response.json();
 
 async function getState(admin: any) {
@@ -56,7 +70,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             type: "json",
             ownerType: "SHOP",
             access: {
-              admin: "MERCHANT_READ_WRITE",
+              admin: "PUBLIC_READ_WRITE",
               storefront: "PUBLIC_READ",
             },
           },
@@ -96,6 +110,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 const numericId = (gid: string) => Number(gid?.split("/").pop() || 0);
 const chosen = (product: any) => { const variant = product.variants?.[0]; return { productId: numericId(product.id), productGid: product.id, variantId: numericId(variant?.id), variantGid: variant?.id, title: product.title, isKids: /kids?/i.test(product.title) }; };
 
+function Field({ label, value, onChange, type = "text", help }: any) {
+  return <label style={{ display: "grid", gap: 6, marginBottom: 14, maxWidth: 680 }}>
+    <span style={{ fontWeight: 600 }}>{label}</span>
+    <input type={type} value={value ?? ""} onChange={(e) => onChange(type === "number" ? Number(e.target.value) : e.target.value)} style={{ boxSizing: "border-box", width: "100%", minHeight: 38, padding: "8px 10px", border: "1px solid #8a8a8a", borderRadius: 8, font: "inherit" }} />
+    {help && <span style={{ color: "#616161", fontSize: 12 }}>{help}</span>}
+  </label>;
+}
+
 export default function Index() {
   const loaded = useLoaderData<typeof loader>(), result = useActionData<typeof action>();
   const [config, setConfig] = useState<any>(loaded.config);
@@ -105,6 +127,7 @@ export default function Index() {
     if (kind === "eligible") setConfig({ ...config, eligibleProducts: products.map(chosen) });
     else setConfig({ ...config, [kind === "adult" ? "adultGift" : "kidsGift"]: chosen(products[0]) });
   }
+  const set = (key: string, value: any) => setConfig({ ...config, [key]: value });
   return <s-page heading="Cart rewards">
     <s-section heading="Products">
       <s-paragraph>Only selected single-bottle products qualify. Bundle products remain excluded.</s-paragraph>
@@ -115,7 +138,52 @@ export default function Index() {
       <s-button onClick={() => pick("kids")}>Select kids toothbrush</s-button>
       <s-paragraph>{config.kidsGift?.title || "None selected"}</s-paragraph>
     </s-section>
-    <s-section heading="Milestones"><s-paragraph>2 bottles: one toothbrush. 3 bottles: free shipping. 4 bottles: two toothbrushes. If Kids is included, one gift is the Kids toothbrush.</s-paragraph></s-section>
+    <s-section heading="Milestones">
+      <Field label="Free toothbrush milestone" type="number" value={config.toothbrushAt} onChange={(v: number) => set("toothbrushAt", v)} />
+      <Field label="Free shipping milestone" type="number" value={config.shippingAt} onChange={(v: number) => set("shippingAt", v)} />
+      <Field label="Two-toothbrush milestone" type="number" value={config.doubleGiftAt} onChange={(v: number) => set("doubleGiftAt", v)} />
+    </s-section>
+    <s-section heading="Progress bar text">
+      <Field label="Before toothbrush unlocks" value={config.progressText} onChange={(v: string) => set("progressText", v)} help="Available: {qty}, {target}, {remaining}" />
+      <Field label="After toothbrush unlocks" value={config.giftUnlockedText} onChange={(v: string) => set("giftUnlockedText", v)} help="Available: {qty}, {target}, {remaining}" />
+      <Field label="All rewards unlocked" value={config.allUnlockedText} onChange={(v: string) => set("allUnlockedText", v)} help="Available: {qty}" />
+      <Field label="Toothbrush milestone label" value={config.giftLabel} onChange={(v: string) => set("giftLabel", v)} />
+      <Field label="Shipping milestone label" value={config.shippingLabel} onChange={(v: string) => set("shippingLabel", v)} />
+    </s-section>
+    <s-section heading="Progress bar icons">
+      <Field label="Toothbrush icon image URL" value={config.giftIconUrl} onChange={(v: string) => set("giftIconUrl", v)} help="Leave blank to use the built-in toothbrush icon. Use an HTTPS SVG, PNG or WebP URL." />
+      <Field label="Shipping icon image URL" value={config.shippingIconUrl} onChange={(v: string) => set("shippingIconUrl", v)} help="Leave blank to use the built-in delivery icon. Use an HTTPS SVG, PNG or WebP URL." />
+    </s-section>
+    <s-section heading="Colors">
+      <Field label="Background color" type="color" value={config.backgroundColor} onChange={(v: string) => set("backgroundColor", v)} />
+      <Field label="Heading text color" type="color" value={config.headingColor} onChange={(v: string) => set("headingColor", v)} />
+      <Field label="Milestone label color" type="color" value={config.labelColor} onChange={(v: string) => set("labelColor", v)} />
+      <Field label="Completed label color" type="color" value={config.completedColor} onChange={(v: string) => set("completedColor", v)} />
+      <Field label="Progress and completed icon color" type="color" value={config.accentColor} onChange={(v: string) => set("accentColor", v)} />
+      <Field label="Incomplete track color" type="color" value={config.trackColor} onChange={(v: string) => set("trackColor", v)} />
+      <Field label="Border color" type="color" value={config.borderColor} onChange={(v: string) => set("borderColor", v)} />
+    </s-section>
+    <s-section heading="Typography and sizing">
+      <Field label="Heading font size (px)" type="number" value={config.headingFontSize} onChange={(v: number) => set("headingFontSize", v)} />
+      <Field label="Milestone label font size (px)" type="number" value={config.labelFontSize} onChange={(v: number) => set("labelFontSize", v)} />
+      <Field label="Icon circle size (px)" type="number" value={config.iconSize} onChange={(v: number) => set("iconSize", v)} />
+      <Field label="Progress line thickness (px)" type="number" value={config.lineThickness} onChange={(v: number) => set("lineThickness", v)} />
+      <Field label="Animation duration (milliseconds)" type="number" value={config.animationDuration} onChange={(v: number) => set("animationDuration", v)} />
+      <Field label="Border width (px)" type="number" value={config.borderWidth} onChange={(v: number) => set("borderWidth", v)} />
+      <Field label="Border radius (px)" type="number" value={config.borderRadius} onChange={(v: number) => set("borderRadius", v)} />
+    </s-section>
+    <s-section heading="Padding">
+      <Field label="Top padding (px)" type="number" value={config.paddingTop} onChange={(v: number) => set("paddingTop", v)} />
+      <Field label="Right padding (px)" type="number" value={config.paddingRight} onChange={(v: number) => set("paddingRight", v)} />
+      <Field label="Bottom padding (px)" type="number" value={config.paddingBottom} onChange={(v: number) => set("paddingBottom", v)} />
+      <Field label="Left padding (px)" type="number" value={config.paddingLeft} onChange={(v: number) => set("paddingLeft", v)} />
+    </s-section>
+    <s-section heading="Margin">
+      <Field label="Top margin (px)" type="number" value={config.marginTop} onChange={(v: number) => set("marginTop", v)} />
+      <Field label="Right margin (px)" type="number" value={config.marginRight} onChange={(v: number) => set("marginRight", v)} />
+      <Field label="Bottom margin (px)" type="number" value={config.marginBottom} onChange={(v: number) => set("marginBottom", v)} />
+      <Field label="Left margin (px)" type="number" value={config.marginLeft} onChange={(v: number) => set("marginLeft", v)} />
+    </s-section>
     <Form method="post">
       <input type="hidden" name="config" value={JSON.stringify(config)} />
       <s-button type="submit" name="intent" value="save">Save settings</s-button>{" "}
