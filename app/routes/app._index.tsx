@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
-import { useState } from "react";
+import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -144,9 +144,18 @@ function IconPicker({ label, url, onSelect, onRemove }: any) {
   </div>;
 }
 
+const SaveSpinner = () => <span className="save-spinner" aria-hidden="true" />;
+
 export default function Index() {
   const loaded = useLoaderData<typeof loader>(), result = useActionData<typeof action>();
+  const navigation = useNavigation();
   const [config, setConfig] = useState<any>(loaded.config);
+  const saving = navigation.state === "submitting";
+  const savingIntent = String(navigation.formData?.get("intent") || "");
+  useEffect(() => {
+    if (!result) return;
+    (window as any).shopify?.toast?.show(result.message, { isError: !result.ok, duration: 4000 });
+  }, [result]);
   async function pick(kind: "eligible" | "adult" | "kids") {
     const products = await (window as any).shopify.resourcePicker({ type: "product", multiple: kind === "eligible", filter: { variants: true } });
     if (!products?.length) return;
@@ -177,6 +186,10 @@ export default function Index() {
     else setConfig({ ...config, shippingIconId: "", shippingIconUrl: "" });
   }
   return <s-page heading="Cart rewards">
+    <style>{`@keyframes cartRewardSpin{to{transform:rotate(360deg)}}.save-spinner{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:cartRewardSpin .65s linear infinite}`}</style>
+    {result && <s-banner tone={result.ok ? "success" : "critical"} heading={result.ok ? "Settings saved" : "Unable to save"}>
+      <s-paragraph>{result.message}</s-paragraph>
+    </s-banner>}
     <s-section heading="Products">
       <s-paragraph>Only selected single-bottle products qualify. Bundle products remain excluded.</s-paragraph>
       <s-button onClick={() => pick("eligible")}>Select eligible bottles</s-button>
@@ -236,8 +249,8 @@ export default function Index() {
     <Form method="post">
       <input type="hidden" name="config" value={JSON.stringify(config)} />
       <div style={{ display: "flex", gap: 10, margin: "18px 0" }}>
-        <button type="submit" name="intent" value="save" style={{ minHeight: 38, padding: "8px 16px", border: "1px solid #8a8a8a", borderRadius: 8, background: "#fff", font: "inherit", cursor: "pointer" }}>Save settings</button>
-        <button type="submit" name="intent" value="activate" style={{ minHeight: 38, padding: "8px 16px", border: 0, borderRadius: 8, background: "#303030", color: "#fff", font: "inherit", fontWeight: 600, cursor: "pointer" }}>Save and activate</button>
+        <button type="submit" name="intent" value="save" disabled={saving} aria-busy={saving && savingIntent === "save"} style={{ minHeight: 38, minWidth: 126, padding: "8px 16px", border: "1px solid #8a8a8a", borderRadius: 8, background: "#fff", font: "inherit", cursor: saving ? "wait" : "pointer", opacity: saving ? .65 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{saving && savingIntent === "save" && <SaveSpinner />}{saving && savingIntent === "save" ? "Saving…" : "Save settings"}</button>
+        <button type="submit" name="intent" value="activate" disabled={saving} aria-busy={saving && savingIntent === "activate"} style={{ minHeight: 38, minWidth: 154, padding: "8px 16px", border: 0, borderRadius: 8, background: "#303030", color: "#fff", font: "inherit", fontWeight: 600, cursor: saving ? "wait" : "pointer", opacity: saving ? .65 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{saving && savingIntent === "activate" && <SaveSpinner />}{saving && savingIntent === "activate" ? "Saving and activating…" : "Save and activate"}</button>
       </div>
     </Form>
     <s-section heading="Status"><s-paragraph>{loaded.apiError || (result && (result.ok ? `Success: ${result.message}` : `Error: ${result.message}`)) || "Configure products, then activate once."}</s-paragraph></s-section>
