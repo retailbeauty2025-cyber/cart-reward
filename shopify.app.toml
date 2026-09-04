@@ -2,7 +2,7 @@
 
 client_id = "bbdffd5a34c7643fe96e52b9df07666e"
 name = "cart-reward-discount"
-application_url = "https://example.com"
+application_url = "https://cart-reward.onrender.com/app"
 embedded = true
 
 [access_scopes]
@@ -45,7 +45,11 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://cart-reward.onrender.com/auth/callback",
+  "https://cart-reward.onrender.com/auth/shopify/callback",
+  "https://cart-reward.onrender.com/api/auth/callback"
+]
 
 [build]
 automatically_update_urls_on_dev = true
