@@ -12,7 +12,7 @@ const defaults = {
   giftUnlockedText: "Toothbrush unlocked — add {remaining} more bottle for FREE shipping",
   allUnlockedText: "All rewards unlocked — FREE toothbrush + FREE shipping",
   giftLabel: "Free Toothbrush", shippingLabel: "Free Shipping",
-  giftIconUrl: "", shippingIconUrl: "",
+  giftIconId: "", giftIconUrl: "", shippingIconId: "", shippingIconUrl: "",
   backgroundColor: "#ffffff", headingColor: "#172019", labelColor: "#737a75",
   completedColor: "#225d34", accentColor: "#2e7d45", trackColor: "#edf0ed",
   borderColor: "#ececec", borderWidth: 1, borderRadius: 14,
@@ -42,7 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { config, apiError: body.errors?.map((e: any) => e.message).join("; ") || "" };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+const performAction = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
   const form = await request.formData();
   const { body } = await getState(admin);
@@ -107,6 +107,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return errors.length ? { ok: false, message: errors.map((e: any) => e.message).join("; ") } : { ok: true, message: "Automatic reward settings updated." };
 };
 
+export const action = async (args: ActionFunctionArgs) => {
+  try {
+    return await performAction(args);
+  } catch (error) {
+    console.error("Cart reward action failed", error);
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The Shopify API request failed.",
+    };
+  }
+};
+
 const numericId = (gid: string) => Number(gid?.split("/").pop() || 0);
 const chosen = (product: any) => { const variant = product.variants?.[0]; return { productId: numericId(product.id), productGid: product.id, variantId: numericId(variant?.id), variantGid: variant?.id, title: product.title, isKids: /kids?/i.test(product.title) }; };
 
@@ -116,6 +128,19 @@ function Field({ label, value, onChange, type = "text", help }: any) {
     <input type={type} value={value ?? ""} onChange={(e) => onChange(type === "number" ? Number(e.target.value) : e.target.value)} style={{ boxSizing: "border-box", width: "100%", minHeight: 38, padding: "8px 10px", border: "1px solid #8a8a8a", borderRadius: 8, font: "inherit" }} />
     {help && <span style={{ color: "#616161", fontSize: 12 }}>{help}</span>}
   </label>;
+}
+
+function IconPicker({ label, url, onSelect, onRemove }: any) {
+  return <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
+    <strong>{label}</strong>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ width: 56, height: 56, display: "grid", placeItems: "center", overflow: "hidden", border: "1px solid #dedede", borderRadius: 10, background: "#f7f7f7" }}>
+        {url ? <img src={url} alt="Selected icon" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <span style={{ color: "#616161", fontSize: 12 }}>Built-in</span>}
+      </div>
+      <s-button onClick={onSelect}>{url ? "Change from Shopify Files" : "Select from Shopify Files"}</s-button>
+      {url && <s-button tone="critical" onClick={onRemove}>Remove</s-button>}
+    </div>
+  </div>;
 }
 
 export default function Index() {
@@ -128,6 +153,28 @@ export default function Index() {
     else setConfig({ ...config, [kind === "adult" ? "adultGift" : "kidsGift"]: chosen(products[0]) });
   }
   const set = (key: string, value: any) => setConfig({ ...config, [key]: value });
+  async function pickIcon(kind: "gift" | "shipping") {
+    const idKey = kind === "gift" ? "giftIconId" : "shippingIconId";
+    const urlKey = kind === "gift" ? "giftIconUrl" : "shippingIconUrl";
+    const currentId = config[idKey];
+    const activity = await (window as any).shopify.intents.invoke("pick:shopify/File", {
+      data: { mediaTypes: ["MediaImage"], multiSelect: false, selectedFiles: currentId ? [currentId] : [] },
+    });
+    const response = await activity.complete;
+    const selectedId = response.code === "ok" ? response.data?.ids?.[0] : null;
+    if (!selectedId) return;
+    const resolved = await fetch(`/app/file-url?id=${encodeURIComponent(selectedId)}`);
+    const file = await resolved.json();
+    if (!resolved.ok || !file.url) {
+      (window as any).shopify.toast.show(file.error || "Unable to read that Shopify file", { isError: true });
+      return;
+    }
+    setConfig({ ...config, [idKey]: selectedId, [urlKey]: file.url });
+  }
+  function removeIcon(kind: "gift" | "shipping") {
+    if (kind === "gift") setConfig({ ...config, giftIconId: "", giftIconUrl: "" });
+    else setConfig({ ...config, shippingIconId: "", shippingIconUrl: "" });
+  }
   return <s-page heading="Cart rewards">
     <s-section heading="Products">
       <s-paragraph>Only selected single-bottle products qualify. Bundle products remain excluded.</s-paragraph>
@@ -151,8 +198,9 @@ export default function Index() {
       <Field label="Shipping milestone label" value={config.shippingLabel} onChange={(v: string) => set("shippingLabel", v)} />
     </s-section>
     <s-section heading="Progress bar icons">
-      <Field label="Toothbrush icon image URL" value={config.giftIconUrl} onChange={(v: string) => set("giftIconUrl", v)} help="Leave blank to use the built-in toothbrush icon. Use an HTTPS SVG, PNG or WebP URL." />
-      <Field label="Shipping icon image URL" value={config.shippingIconUrl} onChange={(v: string) => set("shippingIconUrl", v)} help="Leave blank to use the built-in delivery icon. Use an HTTPS SVG, PNG or WebP URL." />
+      <IconPicker label="Toothbrush milestone icon" url={config.giftIconUrl} onSelect={() => pickIcon("gift")} onRemove={() => removeIcon("gift")} />
+      <IconPicker label="Shipping milestone icon" url={config.shippingIconUrl} onSelect={() => pickIcon("shipping")} onRemove={() => removeIcon("shipping")} />
+      <s-paragraph>Select an image from Shopify Admin → Content → Files. Removing it restores the built-in icon.</s-paragraph>
     </s-section>
     <s-section heading="Colors">
       <Field label="Background color" type="color" value={config.backgroundColor} onChange={(v: string) => set("backgroundColor", v)} />
@@ -186,8 +234,10 @@ export default function Index() {
     </s-section>
     <Form method="post">
       <input type="hidden" name="config" value={JSON.stringify(config)} />
-      <s-button type="submit" name="intent" value="save">Save settings</s-button>{" "}
-      <s-button type="submit" name="intent" value="activate" variant="primary">Save and activate</s-button>
+      <div style={{ display: "flex", gap: 10, margin: "18px 0" }}>
+        <button type="submit" name="intent" value="save" style={{ minHeight: 38, padding: "8px 16px", border: "1px solid #8a8a8a", borderRadius: 8, background: "#fff", font: "inherit", cursor: "pointer" }}>Save settings</button>
+        <button type="submit" name="intent" value="activate" style={{ minHeight: 38, padding: "8px 16px", border: 0, borderRadius: 8, background: "#303030", color: "#fff", font: "inherit", fontWeight: 600, cursor: "pointer" }}>Save and activate</button>
+      </div>
     </Form>
     <s-section heading="Status"><s-paragraph>{loaded.apiError || (result && (result.ok ? `Success: ${result.message}` : `Error: ${result.message}`)) || "Configure products, then activate once."}</s-paragraph></s-section>
   </s-page>;
