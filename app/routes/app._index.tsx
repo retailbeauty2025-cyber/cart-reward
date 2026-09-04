@@ -78,7 +78,9 @@ const performAction = async ({ request }: ActionFunctionArgs) => {
     ),
   );
   const definitionErrors = definition.data?.metafieldDefinitionCreate?.userErrors ?? definition.errors ?? [];
-  const blockingDefinitionErrors = definitionErrors.filter((e: any) => !/already exists|taken/i.test(e.message));
+  const blockingDefinitionErrors = definitionErrors.filter(
+    (e: any) => !/already exists|taken|key is in use/i.test(e.message),
+  );
   if (blockingDefinitionErrors.length) return { ok: false, message: blockingDefinitionErrors.map((e: any) => e.message).join("; ") };
   const save = await readJson(await admin.graphql(`#graphql
     mutation SaveCartReward($metafields: [MetafieldsSetInput!]!) {
