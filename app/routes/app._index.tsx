@@ -38,10 +38,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!config.eligibleProducts?.length || !config.adultGift?.variantId || !config.kidsGift?.variantId)
     return { ok: false, message: "Select eligible bottles, an adult toothbrush and a kids toothbrush." };
   const value = JSON.stringify(config);
-  const definition = await readJson(await admin.graphql(`#graphql
-    mutation DefineCartReward($definition: MetafieldDefinitionInput!) {
-      metafieldDefinitionCreate(definition: $definition) { userErrors { code message } }
-    }`, { variables: { definition: { name: "Cart reward configuration", namespace: NS, key: KEY, type: "json", ownerType: "SHOP", access: { admin: "MERCHANT_READ_WRITE", storefront: "PUBLIC_READ" } } }));
+  const definition = await readJson(
+    await admin.graphql(
+      `#graphql
+        mutation DefineCartReward($definition: MetafieldDefinitionInput!) {
+          metafieldDefinitionCreate(definition: $definition) {
+            userErrors { code message }
+          }
+        }
+      `,
+      {
+        variables: {
+          definition: {
+            name: "Cart reward configuration",
+            namespace: NS,
+            key: KEY,
+            type: "json",
+            ownerType: "SHOP",
+            access: {
+              admin: "MERCHANT_READ_WRITE",
+              storefront: "PUBLIC_READ",
+            },
+          },
+        },
+      },
+    ),
+  );
   const definitionErrors = definition.data?.metafieldDefinitionCreate?.userErrors ?? definition.errors ?? [];
   const blockingDefinitionErrors = definitionErrors.filter((e: any) => !/already exists|taken/i.test(e.message));
   if (blockingDefinitionErrors.length) return { ok: false, message: blockingDefinitionErrors.map((e: any) => e.message).join("; ") };
