@@ -7,7 +7,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 const NS = "cart_rewards", KEY = "config", TITLE = "Cart Reward – Toothbrushes";
 const defaults = {
   eligibleProducts: [], adultGift: null, kidsGift: null,
-  toothbrushAt: 2, shippingAt: 3, doubleGiftAt: 4,
+  toothbrushAt: 2, shippingAt: 3, doubleGiftAt: 4, shippingAtAmount: 0,
   progressText: "{qty}/{target} bottles — add {remaining} more to get a FREE toothbrush",
   giftUnlockedText: "Toothbrush unlocked — add {remaining} more bottle for FREE shipping",
   allUnlockedText: "All rewards unlocked — FREE toothbrush + FREE shipping",
@@ -203,6 +203,7 @@ export default function Index() {
       <Field label="Free toothbrush milestone" type="number" value={config.toothbrushAt} onChange={(v: number) => set("toothbrushAt", v)} />
       <Field label="Free shipping milestone" type="number" value={config.shippingAt} onChange={(v: number) => set("shippingAt", v)} />
       <Field label="Two-toothbrush milestone" type="number" value={config.doubleGiftAt} onChange={(v: number) => set("doubleGiftAt", v)} />
+      <Field label="Free shipping cart value" type="number" value={config.shippingAtAmount} onChange={(v: number) => set("shippingAtAmount", v)} help="Enter the same order amount as your Shopify automatic free-shipping discount (in your store's currency, e.g. 360 for ₹360). If the eligible cart total reaches this amount, both the toothbrush and free shipping unlock immediately, even with a single bottle. Leave as 0 to disable and use bottle-count milestones only." />
     </s-section>
     <s-section heading="Progress bar text">
       <Field label="Before toothbrush unlocks" value={config.progressText} onChange={(v: string) => set("progressText", v)} help="Available: {qty}, {target}, {remaining}" />
