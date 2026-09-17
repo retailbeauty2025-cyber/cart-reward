@@ -37,9 +37,9 @@ async function getState(admin: any) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const { body, config } = await getState(admin);
-  return { config, apiError: body.errors?.map((e: any) => e.message).join("; ") || "" };
+    const { admin } = await authenticate.admin(request);
+    const { body, config } = await getState(admin);
+    return { config, apiError: body.errors?.map((e: any) => e.message).join("; ") || "" };
 };
 
 const performAction = async ({ request }: ActionFunctionArgs) => {

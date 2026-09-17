@@ -7,5 +7,6 @@ export default {
   allowedActionOrigins: [
     "cart-reward.onrender.com",
     "admin.shopify.com",
+    "cart-reward-live.onrender.com"
   ],
 } satisfies Config;
